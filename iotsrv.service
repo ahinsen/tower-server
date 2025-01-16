@@ -1,0 +1,12 @@
+[Unit]
+Description=Iot Server
+After=apache2
+
+[Service]
+ExecStart=nodejs /usr/local/src/iotsrv/server1.js >>/var/log/iotsrv/iotsrv.log 2>>&1
+Restart=always
+User=nobody
+Group=nogroup
+Environment=PATH=/usr/bin:/usr/local/bin
+Environment=NODE_ENV=production
+WorkingDirectory=/usr/local/src/iotsrv/
