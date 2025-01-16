@@ -1,7 +1,10 @@
+/* check log using
+journalctl -u iotsrv.service
+*/
 const http=require("http");
 const msgListener=function(req,res){
 	res.writeHead(200);
-/	res.end("MyFirstServer");/
+//	res.end("MyFirstServer");
 	if (req.method === 'POST') {
 	    let data = '';
 	    req.on('data', chunk => {
@@ -13,7 +16,8 @@ const msgListener=function(req,res){
 	      res.end('Received'+data.length.toString()+' bytes of data \n');
 	    });
 	  } else {
-	    res.end('Send a POST request to this endpoint_V5');
+	    res.end('Send a POST request to this endpoint_V6');
+		console.log('Received non-POST');
 	  }
 }
 const port=8000;
