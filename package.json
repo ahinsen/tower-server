@@ -2,5 +2,8 @@
   "dependencies": {
     "http": "^0.0.1-security",
     "mongoose": "^8.9.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7"
   }
 }
