@@ -1,6 +1,7 @@
 [Unit]
 Description=Iot Server
 After=apache2
+After=mongod
 
 [Service]
 ExecStart=/usr/bin/node /usr/local/src/iotsrv/iotserver1.js

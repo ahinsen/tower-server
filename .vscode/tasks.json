@@ -2,10 +2,21 @@
     "version": "2.0.0",
     "tasks": [
       {
-        "label": "Restart iotsrv",
+        "label": "Daemon-reload",
+        "type": "shell",
+        "command": "systemctl daemon-reload",
+        "problemMatcher": []
+      },
+      {
+        "label": "Restart app",
         "type": "shell",
         "command": "systemctl restart iotsrv",
         "problemMatcher": []
-      }
+      },
+      {
+        "label": "Reastart iotsrv",
+        "dependsOn":["Daemon-reload","Restart app"]
+        }
+
     ]
   }
