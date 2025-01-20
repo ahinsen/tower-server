@@ -8,7 +8,7 @@ check log using journalctl -u iotsrv.service
 import config from './towerSrvCfg.json' assert { type: 'json' };
 import { MongoClient } from 'mongodb';
 import { createServer } from 'http';
-import { error } from 'console';
+import { LOG_LEVELS, setLogLevel, log } from './log.js';
 
 let dbClient;
 let httpServer;
@@ -18,36 +18,69 @@ startServer();
 // processing the http request
 const httpListener = async function(req, res) {
 	let data = '';
+	let result = [""];
 	req.on('data', chunk => data += chunk.toString());
 	req.on('end', async () => {
 		try {
-			if (config.loglevel === 'debug') {
-				console.log('Request Headers:', req.headers);
-				console.log('Request Method:', req.method);
-				console.log('Request URL:', req.url);
-				console.log('Data:', data);
-			}
+			log(LOG_LEVELS.DEBUG,'Request Headers:', req.headers);
+			log(LOG_LEVELS.DEBUG,'Request Method:', req.method);
+			log(LOG_LEVELS.DEBUG,'Request URL:', req.url);
+			log(LOG_LEVELS.DEBUG,'Data:', data);
 			if (req.method === 'POST') {
 				if (await writeToDb(data)) httpResponse(res,200,"success");
 				else                       httpResponse(res,500,'db write error');
 			} else if (req.method === 'GET') {
-				if(await readFromDb(data,res)) httpResponse(res,200,"success");
-				else                           httpResponse(res,500,'db read error');
-			} else httpResponse(res,400,"Unsupported request method:"+req.method);
+				if(await readFromDb(data,result)) httpResponse(res,200,"success");
+				else                              httpResponse(res,400,result[0]);
+			} else httpResponse(res,400,"Unsupported request method:",req.method);
 		} catch (error) {
-			httpResponse(res,500, "Error during processing request"+error.message);
+			httpResponse(res,500, "Error during processing request(end)", error.message);
 		}
 	});
-	//req.on('error', () => {httpResponse(res,500, "Error during processing request. Receieved:"+data);});
+	req.on('error', (err) => {log(LOG_LEVELS.ERROR, "Error during processing request(error)", err);});
 	//req.on('close', () => {httpResponse(res,500, "Request closed before completion"+data);}); 
 };
 
-function httpResponse(res, code, message) {
-	if (config.loglevel === 'debug') {console.log('Response:', code, message);}
-	res.writeHead(code);
-	res.end(message);
+// Generating the http response
+async function httpResponse(res, code, message) {
+	if (!res.headersSent) {
+		log(LOG_LEVELS.DEBUG,'Response: ', code, message);
+		await res.writeHead(code);
+		await res.end(message);
+	} else log(LOG_LEVELS.DEBUG, "(Response already sent) ", message);
 }
 
+// Database functions
+async function writeToDb(data){
+	try {
+		log(LOG_LEVELS.DEBUG,"writeToDb trying insert....");
+		const database = dbClient.db(config.dbCfg.dbName);
+		const msg = database.collection('msg');
+		const myobj = { received_at: Date.now(), content: data };
+		const result = await msg.insertOne(myobj);
+		log(LOG_LEVELS.DEBUG,"dbInsertOneResult:\n"+result);
+		return true;
+	}
+	catch (error) {
+		log(LOG_LEVELS.ERROR,"writeToDb Error:", error.message);
+		return false;
+	} 
+}
+async function readFromDb(data,result){
+	try{
+		log(LOG_LEVELS.DEBUG,"readFromDb trying find....");
+		const database = dbClient.db(config.dbCfg.dbName);
+		const msg = database.collection('msg');
+		result = await msg.find(data).toArray();
+		log(LOG_LEVELS.DEBUG,"dbFindResult:\n",result);
+		return true;
+	} catch (error) {
+		result[0]= error.message;
+		return false;
+	}
+}
+
+// Server startup
 async function startServer() {
     try {
         // Validate required properties
@@ -55,53 +88,31 @@ async function startServer() {
         if (!config.httpCfg.port) throw new Error("Missing required config property in 'towerSrvCfg.json': httpCfg.port");
         if (!config.httpCfg.host) throw new Error("Missing required config property in 'towerSrvCfg.json': httpCfg.host");
         if (!config.dbCfg.uri) throw new Error("Missing required config property in 'towerSrvCfg.json': dbCfg.uri");
+		setLogLevel(config.loglevel);
 
         // Prepare the MongoDB server connection
         dbClient = new MongoClient(config.dbCfg.uri);
         await dbClient.connect();
-        console.log("Connected successfully to MongoDB");
+        log(LOG_LEVELS.INFO,"Connected successfully to MongoDB");
 
         // Prepare and start the HTTP server
         const httpServer = createServer(httpListener);
         httpServer.listen(config.httpCfg.port, config.httpCfg.host, () => {
-            console.log(`Server running at http://${config.httpCfg.host}:${config.httpCfg.port}/`);
+            log(LOG_LEVELS.INFO,`Server running at http://${config.httpCfg.host}:${config.httpCfg.port}/`);
         });
 	} catch (error) {
-		console.error("Error starting server:", error.message);
+		log(LOG_LEVELS.ERROR, "Error starting server:", error.message);
 		await shutdown(1); // Gracefully shut down with an error code
 	}
 }
 
-// Database functions
-async function writeToDb(data){
-	try {
-		console.log("writeToDb trying insert....");
-		const database = dbClient.db('iotsrv');
-		const msg = database.collection('msg');
-		const myobj = { received_at: Date.now(), content: data };
-		const result = await msg.insertOne(myobj);
-		console.log("dbInsertOneResult:\n",result);
-		return true;
-	}
-	catch (error) {
-		console.error("writeToDb Error:", error.message);
-		return false;
-	} 
-}
-async function readFromDb(data,res){
-	console.log('getFromDb request:\n'+req.toString());
-	res.end('GET request\n');
-}
-
-
-
 // Graceful shutdown
 process.on('uncaughtException', (error) => {
-    console.error("Uncaught Exception:", error.message);
+    log(LOG_LEVELS.ERROR,"Uncaught Exception:", error.message);
     shutdown(1); e
 });
 process.on('unhandledRejection', (reason, promise) => {
-    console.error("Unhandled Rejection:", reason);
+    log(LOG_LEVELS.ERROR,"Unhandled Rejection:", reason);
     shutdown(1); 
 });
 process.on('SIGINT', () => shutdown(0));
@@ -110,17 +121,17 @@ process.on('SIGTERM', () => shutdown(0));
 
 // Define the shutdown function globally
 const shutdown = async (exitCode) => {
-    console.log("Shutting down server...");
+    log(LOG_LEVELS.INFO,"Shutting down server...");
     if (dbClient) {
         await dbClient.close();
     }
     if (httpServer) {
         httpServer.close(() => {
-			console.log("Server shut down");
+			log(LOG_LEVELS.INFO,"Server shut down");
 			process.exit(exitCode);
 		});
     } 
-	console.log("Server shut down");
+	log(LOG_LEVELS.INFO,"Server shut down");
     process.exit(exitCode);
 };
 

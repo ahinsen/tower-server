@@ -1,11 +1,18 @@
 {
     "dbCfg": {
-        "uri": "mongodb://tech01:tech01@127.0.0.1:27017/?directConnection=true&serverSelectionTimeoutMS=20000&authSource=admin"
+        "uri": "mongodb://tech01:tech01@127.0.0.1:27017/?directConnection=true&serverSelectionTimeoutMS=20000&authSource=admin",
+        "dbName": "iotsrv"
     },
     "httpCfg": {
         "host": "127.0.0.1",
         "port": 8000,
         "timeout": 30000
     },
-    "loglevel": "debug"
+    "loglevel": "debug",
+    "allowedLoglevels": [
+        "error",
+        "warn",
+        "info",
+        "debug"
+    ]
 }
