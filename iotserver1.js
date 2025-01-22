@@ -58,7 +58,7 @@ async function writeToDb(data){
 		const msg = database.collection('msg');
 		const myobj = { received_at: Date.now(), content: data };
 		const result = await msg.insertOne(myobj);
-		log(LOG_LEVELS.DEBUG,"dbInsertOneResult:\n"+result);
+		log(LOG_LEVELS.DEBUG,"dbInsertOneResult:\n", result);
 		return true;
 	}
 	catch (error) {
@@ -68,11 +68,12 @@ async function writeToDb(data){
 }
 async function readFromDb(data,result){
 	try{
+		const query=JSON.parse(data);
 		log(LOG_LEVELS.DEBUG,"readFromDb trying find....");
 		const database = dbClient.db(config.dbCfg.dbName);
 		const msg = database.collection('msg');
-		result = await msg.find(data).toArray();
-		log(LOG_LEVELS.DEBUG,"dbFindResult:\n",result);
+		result = await msg.find(query).toArray();
+		log(LOG_LEVELS.DEBUG,"dbFindResult:\n", msgresult);
 		return true;
 	} catch (error) {
 		result[0]= error.message;
