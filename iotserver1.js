@@ -73,7 +73,7 @@ async function readFromDb(data,result){
 		const database = dbClient.db(config.dbCfg.dbName);
 		const msg = database.collection('msg');
 		result = await msg.find(query).toArray();
-		log(LOG_LEVELS.DEBUG,"dbFindResult:\n", msgresult);
+		log(LOG_LEVELS.DEBUG,"dbFindResult:\n", result);
 		return true;
 	} catch (error) {
 		result[0]= error.message;
