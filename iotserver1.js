@@ -5,6 +5,7 @@ check log using journalctl -u iotsrv.service
 */
 // Read and validate config properties
 
+
 import config from './towerSrvCfg.json' assert { type: 'json' };
 import { MongoClient } from 'mongodb';
 import { createServer } from 'http';
@@ -56,9 +57,31 @@ async function writeToDb(data){
 		log(LOG_LEVELS.DEBUG,"writeToDb trying insert....");
 		const database = dbClient.db(config.dbCfg.dbName);
 		const msg = database.collection('msg');
-		const myobj = { received_at: Date.now(), content: data };
-		const result = await msg.insertOne(myobj);
-		log(LOG_LEVELS.DEBUG,"dbInsertOneResult:\n", result);
+		const msgObj = { "received_at": Date.now(), "content": data, "processed":"Error" };
+		const result = await msg.insertOne(msgObj);
+		let dataObj = JSON.parse(data);
+		let valueObj = new Object();
+		const msgItems = dataObj['msg-items'];
+		msgItems.forEach((item, index) => {
+			valueObj.push({
+				"itemType": "deviceReading",
+				"receivedAt": Date.now(),
+				"deviceId": dataObj['msg-header']['dev_id'],
+				"validAt": dataObj['msg-header']['valid_at'],
+				"valueType": item.val_type,
+				"value": item.value
+			});
+		});
+		const valuesCollection = database.collection('values');
+		for (const value of valueObj) {
+            await valuesCollection.insertOne(value);
+        }
+        const updateResult = await msg.updateOne(
+            { _id: result.insertedId },
+            { $set: { processed: "Success" } }
+        );
+		log(LOG_LEVELS.DEBUG,"Insert to msg:\n", result);
+		log(LOG_LEVELS.DEBUG,"Insert to values:",valueObj.length,"\n");
 		return true;
 	}
 	catch (error) {
@@ -66,6 +89,8 @@ async function writeToDb(data){
 		return false;
 	} 
 }
+
+
 async function readFromDb(data,result){
 	try{
 		const query=JSON.parse(data);
@@ -136,5 +161,28 @@ const shutdown = async (exitCode) => {
     process.exit(exitCode);
 };
 
+// Test
+import fs from 'fs';
+import path from 'path';
 
+// Function to read the content of samplePOST.json and call writeToDb
+async function testWriteToDb() {
+    try {
+        // Read the content of samplePOST.json
+        const filePath = path.join(path.resolve(), 'samplePOST.json');
+        const data = fs.readFileSync(filePath, 'utf8');
+
+        // Call writeToDb with the string content of samplePOST.json
+        const result = await writeToDb(data);
+
+        // Log the result
+        console.log("Test completed:", result);
+    } catch (error) {
+        console.error("Test failed:", error);
+    }
+}
+
+
+// Call the test function
+testWriteToDb();
 
