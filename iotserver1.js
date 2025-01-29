@@ -10,6 +10,8 @@ import config from './towerSrvCfg.json' assert { type: 'json' };
 import { MongoClient } from 'mongodb';
 import { createServer } from 'http';
 import { LOG_LEVELS, setLogLevel, log } from './log.js';
+import url from 'url';
+import querystring from 'querystring';
 
 let dbClient;
 let httpServer;
@@ -20,6 +22,7 @@ startServer();
 const httpListener = async function(req, res) {
 	let data = '';
 	let result = [""];
+	let resp={code:500, message:"Error processing request"};	
 	req.on('data', chunk => data += chunk.toString());
 	req.on('end', async () => {
 		try {
@@ -28,12 +31,37 @@ const httpListener = async function(req, res) {
 			log(LOG_LEVELS.DEBUG,'Request URL:', req.url);
 			log(LOG_LEVELS.DEBUG,'Data:', data);
 			if (req.method === 'POST') {
-				if (await writeToDb(data)) httpResponse(res,200,"success");
-				else                       httpResponse(res,500,'db write error');
+				resp = await writeToDb(data); 
+				httpResponse(res,resp.code,resp.message);
 			} else if (req.method === 'GET') {
-				if(await readFromDb(data,result)) httpResponse(res,200,"success");
-				else                              httpResponse(res,400,result[0]);
-			} else httpResponse(res,400,"Unsupported request method:",req.method);
+				if (req.url.length<=2){
+
+					//(Object.keys(queryParams).length === 0) {
+                    // No query parameters, respond with index.html
+                    const filePath = path.join(path.resolve(), 'index.html');
+                    fs.readFile(filePath, 'utf8', (err, content) => {
+                        if (err) {
+                            log(LOG_LEVELS.ERROR, "Error reading index.html:", err);
+                            httpResponse(res, 500, "Error reading index.html");
+                        } else {
+                            res.writeHead(200, { 'Content-Type': 'text/html' });
+                            res.end(content);
+                        }
+                    });
+                } else {
+                    // Assuming the query parameter is named 'query'
+                	const parsedUrl = url.parse(req.url);
+                	const queryParams = querystring.parse(parsedUrl.query);
+                	//log(LOG_LEVELS.DEBUG, 'Query Parameters:', JSON.stringify(queryParams));
+                    const queryString = queryParams.query ? decodeURIComponent(queryParams.query) : '{}';
+                    log(LOG_LEVELS.DEBUG, 'Decoded queryString:', queryString);
+                    if (await readFromDb(queryString, result)) {
+                        httpResponse(res, 200, JSON.stringify(result));
+                    } else {
+                        httpResponse(res, 400, result[0]);
+                    }
+                }
+		} else httpResponse(res,400,"Unsupported request method:",req.method);
 		} catch (error) {
 			httpResponse(res,500, "Error during processing request(end)", error.message);
 		}
@@ -48,46 +76,80 @@ async function httpResponse(res, code, message) {
 		log(LOG_LEVELS.DEBUG,'Response: ', code, message);
 		await res.writeHead(code);
 		await res.end(message);
-	} else log(LOG_LEVELS.DEBUG, "(Response already sent) ", message);
+	} else log(LOG_LEVELS.DEBUG, "(Response already sent) ", code,  message);
 }
 
 // Database functions
 async function writeToDb(data){
-	try {
-		log(LOG_LEVELS.DEBUG,"writeToDb trying insert....");
+	let processingStatus="parsing";
+	let parseError="";
+	let valueObj = [];
+	let logObj=[];
+	let resp={code:500,message:"Error writing to db"};
+try { // Parse the message
+		log(LOG_LEVELS.DEBUG,"Parsing the message....");
+		let dataObj = JSON.parse(data);
+		const msgItems = dataObj['msg-items'];
+		log(LOG_LEVELS.DEBUG,"Found ", msgItems.length, "items in the message");
+		msgItems.forEach((item, index) => {
+			if (item.hasOwnProperty('val_type')) {
+				valueObj.push({
+					"itemType": "deviceReading",
+					"receivedAt": Date.now(),
+					"deviceId": dataObj['msg-header']['dev_id'],
+					"validAt": dataObj['msg-header']['valid_at'],
+					"valueType": item.val_type,
+					"value": item.value
+				});
+			} else if (item.hasOwnProperty('loglevel')) {
+				logObj.push({
+					"receivedAt": Date.now(),
+					"deviceId": dataObj['msg-header']['dev_id'],
+					"validAt": dataObj['msg-header']['valid_at'],
+					"logLevel": item.loglevel,
+					"message": item.content
+				});
+			} else {
+				throw new Error(`Invalid item at index ${index}: ${JSON.stringify(item)}`);
+			}
+		});
+		processingStatus="parsedOK"
+	}
+	catch (error) { //Parsing error
+		processingStatus="parseError";
+		parseError=error.message;
+		log(LOG_LEVELS.DEBUG,"Parsing error:", error.message);
+		resp={code:400,message:error.message};
+	}
+	try { // Write to the database
 		const database = dbClient.db(config.dbCfg.dbName);
 		const msg = database.collection('msg');
-		const msgObj = { "received_at": Date.now(), "content": data, "processed":"Error" };
-		const result = await msg.insertOne(msgObj);
-		let dataObj = JSON.parse(data);
-		let valueObj = new Object();
-		const msgItems = dataObj['msg-items'];
-		msgItems.forEach((item, index) => {
-			valueObj.push({
-				"itemType": "deviceReading",
-				"receivedAt": Date.now(),
-				"deviceId": dataObj['msg-header']['dev_id'],
-				"validAt": dataObj['msg-header']['valid_at'],
-				"valueType": item.val_type,
-				"value": item.value
-			});
-		});
-		const valuesCollection = database.collection('values');
-		for (const value of valueObj) {
-            await valuesCollection.insertOne(value);
-        }
-        const updateResult = await msg.updateOne(
-            { _id: result.insertedId },
-            { $set: { processed: "Success" } }
-        );
-		log(LOG_LEVELS.DEBUG,"Insert to msg:\n", result);
-		log(LOG_LEVELS.DEBUG,"Insert to values:",valueObj.length,"\n");
-		return true;
+		const msgObj = { "received_at": Date.now(), "content": data, "processed":processingStatus };
+		if (parseError) msgObj["parseError"]=parseError;
+		let result = await msg.insertOne(msgObj);
+		if (processingStatus=="parsedOK") {
+			const valuesCollection = database.collection('values');
+			for (const value of valueObj) {
+       		    await valuesCollection.insertOne(value);
+			}
+			const logCollection = database.collection('deviceLog');
+			for (const logItem of logObj) {
+				await logCollection.insertOne(logItem);
+			}
+        	result = await msg.updateOne(
+        	    { _id: result.insertedId },
+        	    { $set: { processed: "Success" } }
+        	);
+			resp={code:200,message:"Success"};
+			log(LOG_LEVELS.DEBUG,"Insert to values:",valueObj.length," to deviceLog:",logObj.length);
+		}
+		log(LOG_LEVELS.DEBUG,"Insert to msg: ", JSON.stringify(result));
 	}
 	catch (error) {
 		log(LOG_LEVELS.ERROR,"writeToDb Error:", error.message);
-		return false;
+		if (resp.code==500) resp.message=error.message;
 	} 
+	return resp;
 }
 
 
@@ -168,17 +230,17 @@ import path from 'path';
 // Function to read the content of samplePOST.json and call writeToDb
 async function testWriteToDb() {
     try {
-        // Read the content of samplePOST.json
-        const filePath = path.join(path.resolve(), 'samplePOST.json');
-        const data = fs.readFileSync(filePath, 'utf8');
+        let filePath = path.join(path.resolve(), 'samplePOST.json');
+        let data = fs.readFileSync(filePath, 'utf8');
+        let resp = await writeToDb(data);
+		console.log("Test1 completed:", resp.code, resp.message);
 
-        // Call writeToDb with the string content of samplePOST.json
-        const result = await writeToDb(data);
-
-        // Log the result
-        console.log("Test completed:", result);
+		filePath = path.join(path.resolve(), 'samplePOSTlog.json');
+        data = fs.readFileSync(filePath, 'utf8');
+        resp = await writeToDb(data);
+        console.log("Test2 completed:", resp.code, resp.message);
     } catch (error) {
-        console.error("Test failed:", error);
+        console.error("Test failed:", error.message);
     }
 }
 

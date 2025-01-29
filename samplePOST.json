@@ -1,0 +1,19 @@
+{ 
+    "msg-header": {
+        "dev_id": "P01",
+        "valid_at": 756000000
+    },
+    "msg-items":[
+        { "val_type": "s0t", "value": 12.3},
+        { "val_type": "s0h", "value": 45.6},
+        { "val_type": "s1t", "value": 78.9},
+        { "val_type": "s1h", "value": 12.3},
+        { "val_type": "s2t", "value": 45.6},
+        { "val_type": "s2h", "values": 78.9},
+        { "val_typ": "s3t", "value": 12.3},
+        { "val_type": "s3h", "value": 45.6},
+        { "val_type": "s4t", "value": 78.9},
+        { "val_type": "s4h", "value": 12.3},
+        { "val_type": "BATT", "value": 3150}
+        ]
+}

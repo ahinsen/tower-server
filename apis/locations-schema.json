@@ -1,0 +1,44 @@
+const env = jjv();
+
+// Register a `user` schema
+env.addSchema('user', {
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Location",
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string",
+        "description": "The unique identifier for the location"
+      },
+      "name": {
+        "type": "string",
+        "description": "The name of the location"
+      },
+      "type": {
+        "type": "string",
+        "description": "The type of the location"
+      },
+      "reference": {
+        "type": "string",
+        "description": "Reference to the containing location"
+      },
+      "isRoot": {
+        "type": "boolean",
+        "description": "Signals if this is the root object of the tree"
+      }
+    },
+    "required": ["id", "name", "type", "isRoot"],
+    "allOf": [
+      {
+        "if": {
+          "properties": {
+            "isRoot": { "const": false }
+          }
+        },
+        "then": {
+          "required": ["reference"]
+        }
+      }
+    ]
+  }
