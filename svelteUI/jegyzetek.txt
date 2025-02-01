@@ -1,0 +1,2 @@
+install svelte:
+https://upmostly.com/svelte/how-to-create-a-svelte-app-and-open-it-in-vs-code

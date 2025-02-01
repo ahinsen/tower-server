@@ -5,7 +5,8 @@
     "express": "^4.21.2",
     "http": "^0.0.1-security",
     "kafka-node": "^5.0.0",
-    "mongoose": "^8.9.3"
+    "mongoose": "^8.9.3",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/node": "^22.10.7"
