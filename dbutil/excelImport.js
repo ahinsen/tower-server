@@ -3,15 +3,15 @@ import path from 'path';
 import { MongoClient } from 'mongodb';
 
 const filepath ='./dbutil';
-const filename = 'P02sample.xlsx';
+const filename = 'P01sample.xlsx';
 const sheetname = 'P01';
-const dbUri = "mongodb://tech01:tech01@127.0.0.1:27017/?directConnection=true&serverSelectionTimeoutMS=20000&authSource=admin";
+const dbUri = "mongodb://127.0.0.1:27017/?directConnection=true&serverSelectionTimeoutMS=20000";
 const dbName = 'iotsrv';
 const collectionName = 'values';
 
+const client = new MongoClient(dbUri);
 (async () => {
   try {
-    const client = new MongoClient(dbUri);
     await client.connect();
     const database = client.db(dbName);
     const collection = database.collection(collectionName);
