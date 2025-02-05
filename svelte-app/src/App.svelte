@@ -1,4 +1,3 @@
-<!-- filepath: /home/iot-server/tower-server/svelteUI/src/App.svelte -->
 <script>
     import ZoomableChart from './ZoomableChart.svelte';
 </script>
@@ -7,7 +6,6 @@
     <h1>Graph</h1>
     <ZoomableChart />
 </main>
-
 <!--
 <script>
 	export let name;
@@ -38,5 +36,4 @@
 			max-width: none;
 		}
 	}
-</style>
--->
+</style>-->
