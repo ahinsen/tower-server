@@ -1,4 +1,5 @@
 {
+  "type":"module",
   "name": "tower-server",
   "version": "1.0.0",
   "description": "Server side code for tower",
@@ -18,5 +19,11 @@
     "mongodb"
   ],
   "author": "Andras Hinsenkamp",
-  "license": "ISC"
+  "license": "ISC",
+  "dependencies": {
+    "http": "^0.0.1-security",
+    "mongodb": "^6.13.0",
+    "querystring": "^0.2.1",
+    "url": "^0.11.4"
+  }
 }

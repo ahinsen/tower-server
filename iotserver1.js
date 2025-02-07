@@ -246,5 +246,5 @@ async function testWriteToDb() {
 
 
 // Call the test function
-testWriteToDb();
+//testWriteToDb();
 
