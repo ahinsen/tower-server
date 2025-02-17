@@ -41,7 +41,7 @@ const client = new MongoClient(dbUri);
     });
 
     const result = await collection.insertMany(data);
-    console.log(JSON.stringify(result));
+    console.log(`Number of documents inserted: ${result.insertedCount}`);
     console.log('Data imported successfully');
   } catch (err) {
     console.error(err);
