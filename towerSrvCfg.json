@@ -18,5 +18,10 @@
         "warn",
         "info",
         "debug"
-    ]
+    ],
+    "aioCfg": {
+        "username": "os_pelso",
+        "key": ""
+    }
+
 }
