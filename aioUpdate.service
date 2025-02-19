@@ -1,10 +1,10 @@
 [Unit]
-Description=Iot Server
+Description=AIO Update
 After=apache2
 After=mongod
 
 [Service]
-ExecStart= sudo node /home/iot-server/tower-server/iotserver1.js
+ExecStart=sudo node /home/iot-server/tower-server/aioUpdate.js
 Restart=always
 User=nobody
 Group=nogroup

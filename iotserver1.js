@@ -6,12 +6,18 @@ check log using journalctl -u iotsrv.service
 // Read and validate config properties
 
 
-import config from './towerSrvCfg.json' assert { type: 'json' };
+//import config from './towerSrvCfg.json' assert { type: 'json' };
 import { MongoClient } from 'mongodb';
 import { createServer } from 'http';
 import { LOG_LEVELS, setLogLevel, log } from './log.js';
 import url from 'url';
 import querystring from 'querystring';
+import { promises as fs } from 'fs';
+import path from 'path';
+// Read and parse the JSON configuration file
+const configPath = path.resolve('./towerSrvCfg.json');
+const configData = await fs.readFile(configPath, 'utf-8');
+const config = JSON.parse(configData);
 
 let dbClient;
 let httpServer;
@@ -176,7 +182,7 @@ async function startServer() {
         if (!config.httpCfg.port) throw new Error("Missing required config property in 'towerSrvCfg.json': httpCfg.port");
         if (!config.httpCfg.host) throw new Error("Missing required config property in 'towerSrvCfg.json': httpCfg.host");
         if (!config.dbCfg.uri) throw new Error("Missing required config property in 'towerSrvCfg.json': dbCfg.uri");
-		setLogLevel(config.loglevel);
+		setLogLevel(config.logLevel);
 
         // Prepare the MongoDB server connection
         dbClient = new MongoClient(config.dbCfg.uri);
@@ -224,8 +230,8 @@ const shutdown = async (exitCode) => {
 };
 
 // Test
-import fs from 'fs';
-import path from 'path';
+//import fs from 'fs';
+//import path from 'path';
 
 // Function to read the content of samplePOST.json and call writeToDb
 async function testWriteToDb() {
