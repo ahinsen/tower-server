@@ -77,30 +77,6 @@ async function sendValue() {
     }
 }
 
-/* Convert seconds since a base date (e.g. 2000-01-01) to an ISO date string
-function secondsToISO(base, seconds) {
-    const baseDate = new Date(base);
-    const targetDate = new Date(baseDate.getTime() + seconds * 1000);
-    // Manually format the date to omit fractional seconds
-    const isoString = targetDate.toISOString();
-    return isoString.split('.')[0] + 'Z';
-}*/
-
-// Send a value to Adafruit IO
-async function sendToAdafruitIO(value, ioKey, username, feedKey) {
-    const url = `https://io.adafruit.com/api/v2/${username}/feeds/${feedKey}/data`;
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-            'X-AIO-Key': ioKey,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ value }) 
-    });
-    const responseBody = await response.text();
-    return { ok: response.ok, body: responseBody };
-}
-
 // Synchronize 'settings' collection with new data from Adafruit IO
 async function syncSettings(feedKey) {
     const client = new MongoClient(config.dbCfg.uri);
