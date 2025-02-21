@@ -8,12 +8,13 @@ check log using journalctl -u iotsrv.service
 
 //import config from './towerSrvCfg.json' assert { type: 'json' };
 import { MongoClient } from 'mongodb';
-import { createServer } from 'http';
+import { createServer, get } from 'http';
 import { LOG_LEVELS, setLogLevel, log } from './log.js';
 import url from 'url';
 import querystring from 'querystring';
 import { promises as fs } from 'fs';
 import path from 'path';
+import { error } from 'console';
 // Read and parse the JSON configuration file
 const configPath = path.resolve('./towerSrvCfg.json');
 const configData = await fs.readFile(configPath, 'utf-8');
@@ -21,6 +22,9 @@ const config = JSON.parse(configData);
 
 let dbClient;
 let httpServer;
+
+let valueObj;
+let logObj;
 
 startServer();
 
@@ -86,70 +90,53 @@ async function httpResponse(res, code, message) {
 }
 
 // Database functions
-async function writeToDb(data){
+// Parse the message and write to the values and deviceLog collections
+async function writeToDb(message){
 	let processingStatus="parsing";
-	let parseError="";
+	let parseError=null;
 	let valueObj = [];
 	let logObj=[];
 	let resp={code:500,message:"Error writing to db"};
 try { // Parse the message
-		log(LOG_LEVELS.DEBUG,"Parsing the message....");
-		let dataObj = JSON.parse(data);
-		const msgItems = dataObj['msg-items'];
-		log(LOG_LEVELS.DEBUG,"Found ", msgItems.length, "items in the message");
-		msgItems.forEach((item, index) => {
-			if (item.hasOwnProperty('val_type')) {
-				valueObj.push({
-					"itemType": "deviceReading",
-					"receivedAt": Date.now(),
-					"deviceId": dataObj['msg-header']['dev_id'],
-					"validAt": dataObj['msg-header']['valid_at'],
-					"valueType": item.val_type,
-					"value": item.value
-				});
-			} else if (item.hasOwnProperty('loglevel')) {
-				logObj.push({
-					"receivedAt": Date.now(),
-					"deviceId": dataObj['msg-header']['dev_id'],
-					"validAt": dataObj['msg-header']['valid_at'],
-					"logLevel": item.loglevel,
-					"message": item.content
-				});
-			} else {
-				throw new Error(`Invalid item at index ${index}: ${JSON.stringify(item)}`);
-			}
-		});
+		let dataObj = JSON.parse(message);
+		if (dataObj.hasOwnProperty('msgHeader')) parseTwoLevel(dataObj)
+		else parseSingleLevel(dataObj);
+		// parsing result is in global variables valueObj and logObj
 		processingStatus="parsedOK"
 	}
 	catch (error) { //Parsing error
 		processingStatus="parseError";
 		parseError=error.message;
 		log(LOG_LEVELS.DEBUG,"Parsing error:", error.message);
-		resp={code:400,message:error.message};
 	}
 	try { // Write to the database
 		const database = dbClient.db(config.dbCfg.dbName);
-		const msg = database.collection('msg');
-		const msgObj = { "received_at": Date.now(), "content": data, "processed":processingStatus };
-		if (parseError) msgObj["parseError"]=parseError;
-		let result = await msg.insertOne(msgObj);
-		if (processingStatus=="parsedOK") {
-			const valuesCollection = database.collection('values');
-			for (const value of valueObj) {
-       		    await valuesCollection.insertOne(value);
+		if (parseError){ // Log the error
+			const logCollection = database.collection('log');
+			const logObj = { 
+				"timestamp": Date.now(), 
+				"logLevel":"E",
+				"content": "received content:"+message+"ERROR:"+error.message
+			};
+			await logCollection.insertOne(logObj);
+			resp={code:400,message:error.message};
+		}
+		else {// Write the parsed message to the appropriate collections
+			if (valueObj.length > 0) {
+				const valuesCollection = database.collection('values');
+				for (const value of valueObj) {
+					await valuesCollection.insertOne(value);
+				}
+			}	
+			if (logObj.length > 0) {
+				const logCollection = database.collection('log');
+				for (const logItem of logObj) {
+					await logCollection.insertOne(logItem);
+				}
 			}
-			const logCollection = database.collection('deviceLog');
-			for (const logItem of logObj) {
-				await logCollection.insertOne(logItem);
-			}
-        	result = await msg.updateOne(
-        	    { _id: result.insertedId },
-        	    { $set: { processed: "Success" } }
-        	);
 			resp={code:200,message:"Success"};
 			log(LOG_LEVELS.DEBUG,"Insert to values:",valueObj.length," to deviceLog:",logObj.length);
 		}
-		log(LOG_LEVELS.DEBUG,"Insert to msg: ", JSON.stringify(result));
 	}
 	catch (error) {
 		log(LOG_LEVELS.ERROR,"writeToDb Error:", error.message);
@@ -158,7 +145,96 @@ try { // Parse the message
 	return resp;
 }
 
+function parseTwoLevel(dataObj){
+	log(LOG_LEVELS.DEBUG,"Parsing the message, assuming header/items structure....");
+	const missingProperty = null; // Check for mandatory properties
+	if (!dataObj.hasOwnProperty('msgHeader')) missingProperty = 'msgHeader';
+	else if (!dataObj.hasOwnProperty('msgItems')) missingProperty = 'msgItems';	
+	if (missingProperty) throw new Error(`Missing '${prop}' property in the message`); 
+	const header = dataObj.msgHeader;
+	const items = dataObj.msgItems;
+	log(LOG_LEVELS.DEBUG,"Found ", items.length, "items in the message");
+	msgItems.forEach((item, index) => {
+		let deviceId = header.hasOwnProperty('deviceId')? header.deviceId : item.deviceId;
+		let validAt = 	header.hasOwnProperty('validAt') || 
+						header.hasOwnProperty('read2sendMs') || 
+						header.hasOwnProperty('read2sendSec') ? 
+						getValidAt(header) : getValidAt(item);
+		if (item.hasOwnProperty('valueType')) {
+			valueObj.push({
+				"itemType": "deviceReading",
+				"receivedAt": Date.now(),
+				"deviceId": deviceId,
+				"validAt": validAt,
+				"valueType": item.valueType,
+				"value": item.value
+			});
+		} else if (item.hasOwnProperty('logLevel')) {
+			logObj.push({
+				"itemType": "deviceLog",
+				"receivedAt": Date.now(),
+				"deviceId": deviceId,
+				"validAt": 	validAt,
+				"logLevel": item.logLevel,
+				"message": item.content
+			});
+		} else {
+			throw new Error(`Invalid item at index ${index} it has neither valueType, nor logLevel property: ${JSON.stringify(item)}`);
+		}
+	});
+}
 
+function parseSingleLevel(input){
+	log(LOG_LEVELS.DEBUG,"Parsing the message, assuming single level structure....");
+	let dataObj = JSON.parse(input);
+	const missingProperty = null; // Check for mandatory properties
+	if (Array.isArray(dataObj)) dataObj.forEach((item, index) => {parseOne(item,index);});
+	else parseOne(dataObj,1);
+}
+
+function parseOne(input,index){
+	if (input.hasOwnProperty('valueType')) {
+		valueObj.push({
+			"itemType": "deviceReading",
+			"receivedAt": Date.now(),
+			"deviceId": input.deviceId,
+			"validAt": getValidAt(input),
+			"valueType": input.valueType,
+			"value": input.value
+		});
+	}
+	else if (input.hasOwnProperty('logLevel')) {	
+		logObj.push({
+			"itemType": "deviceLog",
+			"receivedAt": Date.now(),
+			"deviceId": input.deviceId,
+			"validAt": getValidAt(input),
+			"logLevel": input.logLevel,
+			"message": input.content
+		});
+	}else {
+		throw new Error(`Invalid item at index ${index} it has neither valueType, nor logLevel property: ${JSON.stringify(item)}`);
+	}
+
+}
+// Obtain the validAt value from the object
+function getValidAt(object){
+	let validAt; //if object has validAt property, then check the type
+	if (object.hasOwnProperty('validAt')) { 
+		validAt = object.validAt;
+		if (typeof validAt === 'string') validAt = new Date(validAt).getTime()
+		else if (typeof validAt !== 'number') throw new Error(`Invalid validAt type: ${typeof validAt}`);
+	} else { // If there is no validAt in the object, we try to calculate it
+		if (object.hasOwnProperty('read2sendSec')) {
+			validAt = Date.now() - (dataObj.msgHeader.read2send * 1000);
+		} 
+		else if(object.hasOwnProperty('read2sendMs')) {
+			validAt = Date.now() - (dataObj.msgHeader.read2send );
+		} 
+		else validAt = 0;	
+	}
+	return validAt;
+}
 async function readFromDb(data,result){
 	try{
 		const query=JSON.parse(data);
