@@ -23,15 +23,15 @@ const config = JSON.parse(configData);
 let dbClient;
 let httpServer;
 
-let valueObj;
-let logObj;
+let valueObj=[];
+let logObj=[];
+let receivedAt= Date.now();
 
 startServer();
 
 // processing the http request
 const httpListener = async function(req, res) {
 	let data = '';
-	let result = [""];
 	let resp={code:500, message:"Error processing request"};	
 	req.on('data', chunk => data += chunk.toString());
 	req.on('end', async () => {
@@ -42,36 +42,8 @@ const httpListener = async function(req, res) {
 			log(LOG_LEVELS.DEBUG,'Data:', data);
 			if (req.method === 'POST') {
 				resp = await writeToDb(data); 
-				httpResponse(res,resp.code,resp.message);
-			} else if (req.method === 'GET') {
-				if (req.url.length<=2){
-
-					//(Object.keys(queryParams).length === 0) {
-                    // No query parameters, respond with index.html
-                    const filePath = path.join(path.resolve(), 'index.html');
-                    fs.readFile(filePath, 'utf8', (err, content) => {
-                        if (err) {
-                            log(LOG_LEVELS.ERROR, "Error reading index.html:", err);
-                            httpResponse(res, 500, "Error reading index.html");
-                        } else {
-                            res.writeHead(200, { 'Content-Type': 'text/html' });
-                            res.end(content);
-                        }
-                    });
-                } else {
-                    // Assuming the query parameter is named 'query'
-                	const parsedUrl = url.parse(req.url);
-                	const queryParams = querystring.parse(parsedUrl.query);
-                	//log(LOG_LEVELS.DEBUG, 'Query Parameters:', JSON.stringify(queryParams));
-                    const queryString = queryParams.query ? decodeURIComponent(queryParams.query) : '{}';
-                    log(LOG_LEVELS.DEBUG, 'Decoded queryString:', queryString);
-                    if (await readFromDb(queryString, result)) {
-                        httpResponse(res, 200, JSON.stringify(result));
-                    } else {
-                        httpResponse(res, 400, result[0]);
-                    }
-                }
-		} else httpResponse(res,400,"Unsupported request method:",req.method);
+				httpResponse(res,resp.code,resp.message); //default response if no other response is sent
+			} else httpResponse(res,400,"Unsupported request method:",req.method);
 		} catch (error) {
 			httpResponse(res,500, "Error during processing request(end)", error.message);
 		}
@@ -85,23 +57,37 @@ async function httpResponse(res, code, message) {
 	if (!res.headersSent) {
 		log(LOG_LEVELS.DEBUG,'Response: ', code, message);
 		await res.writeHead(code);
-		await res.end(message);
+		const currTime=new Date().toISOString();
+		await res.end('{"serverTime":"'+currTime+'","message":"'+message.replace(/"/g, '\\"')+'"}');
 	} else log(LOG_LEVELS.DEBUG, "(Response already sent) ", code,  message);
 }
 
 // Database functions
-// Parse the message and write to the values and deviceLog collections
+// Parse the message and write to the values and log collections
 async function writeToDb(message){
 	let processingStatus="parsing";
 	let parseError=null;
-	let valueObj = [];
-	let logObj=[];
+	valueObj = [];
+	logObj=[];
+	receivedAt= Date.now();
 	let resp={code:500,message:"Error writing to db"};
-try { // Parse the message
+	try { // Parse the message
 		let dataObj = JSON.parse(message);
-		if (dataObj.hasOwnProperty('msgHeader')) parseTwoLevel(dataObj)
-		else parseSingleLevel(dataObj);
-		// parsing result is in global variables valueObj and logObj
+		if (typeof dataObj !== 'array'){ //If the message is not an array
+			// If it has header and items, then parse it as a two level structure
+			const header = getProperty(dataObj,config.propNames.header,0,'object',null);
+			const items = getProperty(dataObj,config.propNames.items,0,'array',null);
+			if (header && items) {
+				log(LOG_LEVELS.DEBUG,"Parsing the message as a header/item structure having ",items.length, " items....");
+				items.forEach((item, index) => {parseOne(union(header, item), index);});
+			} else { // Otherwise assume it is a single object
+				log(LOG_LEVELS.DEBUG,"Parsing the message as a single object, ....");
+				parseOne(dataObj, 0);
+			}
+		}	else { // If it is an array, then parse each element as a single object
+			log(LOG_LEVELS.DEBUG,"Parsing the message as an array of objects, ....");
+			dataObj.forEach((item, index) => {parseOne(item, index);});
+		}
 		processingStatus="parsedOK"
 	}
 	catch (error) { //Parsing error
@@ -111,31 +97,23 @@ try { // Parse the message
 	}
 	try { // Write to the database
 		const database = dbClient.db(config.dbCfg.dbName);
+		const logCollection = database.collection('log');
+		const valuesCollection = database.collection('values');
 		if (parseError){ // Log the error
-			const logCollection = database.collection('log');
 			const logObj = { 
-				"timestamp": Date.now(), 
+				"timestamp": receivedAt, 
 				"logLevel":"E",
-				"content": "received content:"+message+"ERROR:"+error.message
+				"message": "received content:"+message+"ERROR:"+error.message
 			};
 			await logCollection.insertOne(logObj);
-			resp={code:400,message:error.message};
+			resp={code:400,message:parseError};
+			log(LOG_LEVELS.DEBUG,"Inserted 1 item to log collection");
 		}
 		else {// Write the parsed message to the appropriate collections
-			if (valueObj.length > 0) {
-				const valuesCollection = database.collection('values');
-				for (const value of valueObj) {
-					await valuesCollection.insertOne(value);
-				}
-			}	
-			if (logObj.length > 0) {
-				const logCollection = database.collection('log');
-				for (const logItem of logObj) {
-					await logCollection.insertOne(logItem);
-				}
-			}
+			valueObj.forEach(async (value) => {await valuesCollection.insertOne(value);});
+			logObj.forEach(async (logItem) => {await logCollection.insertOne(logItem);});
 			resp={code:200,message:"Success"};
-			log(LOG_LEVELS.DEBUG,"Insert to values:",valueObj.length," to deviceLog:",logObj.length);
+			log(LOG_LEVELS.DEBUG,"Inserted to values:",valueObj.length,"items, to log:",logObj.length,"items");
 		}
 	}
 	catch (error) {
@@ -144,110 +122,68 @@ try { // Parse the message
 	} 
 	return resp;
 }
-
-function parseTwoLevel(dataObj){
-	log(LOG_LEVELS.DEBUG,"Parsing the message, assuming header/items structure....");
-	const missingProperty = null; // Check for mandatory properties
-	if (!dataObj.hasOwnProperty('msgHeader')) missingProperty = 'msgHeader';
-	else if (!dataObj.hasOwnProperty('msgItems')) missingProperty = 'msgItems';	
-	if (missingProperty) throw new Error(`Missing '${prop}' property in the message`); 
-	const header = dataObj.msgHeader;
-	const items = dataObj.msgItems;
-	log(LOG_LEVELS.DEBUG,"Found ", items.length, "items in the message");
-	msgItems.forEach((item, index) => {
-		let deviceId = header.hasOwnProperty('deviceId')? header.deviceId : item.deviceId;
-		let validAt = 	header.hasOwnProperty('validAt') || 
-						header.hasOwnProperty('read2sendMs') || 
-						header.hasOwnProperty('read2sendSec') ? 
-						getValidAt(header) : getValidAt(item);
-		if (item.hasOwnProperty('valueType')) {
-			valueObj.push({
-				"itemType": "deviceReading",
-				"receivedAt": Date.now(),
-				"deviceId": deviceId,
-				"validAt": validAt,
-				"valueType": item.valueType,
-				"value": item.value
-			});
-		} else if (item.hasOwnProperty('logLevel')) {
-			logObj.push({
-				"itemType": "deviceLog",
-				"receivedAt": Date.now(),
-				"deviceId": deviceId,
-				"validAt": 	validAt,
-				"logLevel": item.logLevel,
-				"message": item.content
-			});
-		} else {
-			throw new Error(`Invalid item at index ${index} it has neither valueType, nor logLevel property: ${JSON.stringify(item)}`);
-		}
-	});
+// Combine two objects. Return an object that contains all the properties of both objects
+function union(obj1, obj2) {
+	let union = {};
+	for (let key in obj1) if (obj1.hasOwnProperty(key)) {union[key] = obj1[key];}
+	for (let key in obj2) if (obj2.hasOwnProperty(key)) {union[key] = obj2[key];}
+	return union;
 }
-
-function parseSingleLevel(input){
-	log(LOG_LEVELS.DEBUG,"Parsing the message, assuming single level structure....");
-	let dataObj = JSON.parse(input);
-	const missingProperty = null; // Check for mandatory properties
-	if (Array.isArray(dataObj)) dataObj.forEach((item, index) => {parseOne(item,index);});
-	else parseOne(dataObj,1);
-}
-
+// Parse a single object, and add the result to the valueObj or logObj arrays
 function parseOne(input,index){
-	if (input.hasOwnProperty('valueType')) {
-		valueObj.push({
-			"itemType": "deviceReading",
-			"receivedAt": Date.now(),
-			"deviceId": input.deviceId,
-			"validAt": getValidAt(input),
-			"valueType": input.valueType,
-			"value": input.value
-		});
+	log(LOG_LEVELS.DEBUG,"Parsing single object:",JSON.stringify(input));
+	const deviceId =getProperty(input, config.propNames.deviceId,  index, 'string','unknown');
+	const validAt = getValidAt(input,index);
+	const valueType = getProperty(input, config.propNames.valueType, index,'string', null);
+	const logLevel = getProperty(input, config.propNames.logLevel, index, 'string',null);
+	if (valueType) {
+		const newObj ={"itemType": "deviceReading","receivedAt": receivedAt,"deviceId": deviceId,
+						"validAt": validAt,"valueType": valueType,"value": input.value};
+		valueObj.push(newObj);
+		log(LOG_LEVELS.DEBUG,`Constructed 'values' object ${index+1}:`,JSON.stringify(newObj));
 	}
-	else if (input.hasOwnProperty('logLevel')) {	
-		logObj.push({
-			"itemType": "deviceLog",
-			"receivedAt": Date.now(),
-			"deviceId": input.deviceId,
-			"validAt": getValidAt(input),
-			"logLevel": input.logLevel,
-			"message": input.content
-		});
+	else if (logLevel){	
+		const logMsg= getProperty(input, config.propNames.logMsg, index,'string', 'No message');
+		const newObj ={ "itemType": "deviceLog","receivedAt": receivedAt,"deviceId": deviceId,
+						"timestamp": validAt,"logLevel": logLevel,"logMsg": logMsg	};
+		logObj.push(newObj);
+		log(LOG_LEVELS.DEBUG,`Constructed 'log' object ${index+1}:`,JSON.stringify(newObj));
 	}else {
-		throw new Error(`Invalid item at index ${index} it has neither valueType, nor logLevel property: ${JSON.stringify(item)}`);
+		throw new Error(`Item ${index+1} has neither valueType, nor logLevel property: ${JSON.stringify(input)}`);
 	}
 
 }
 // Obtain the validAt value from the object
-function getValidAt(object){
-	let validAt; //if object has validAt property, then check the type
-	if (object.hasOwnProperty('validAt')) { 
-		validAt = object.validAt;
+function getValidAt(object,index){
+	let validAt = getProperty(object, config.propNames.validAt,index,null,null);
+	if (validAt){//if object has validAt property, then check the type
 		if (typeof validAt === 'string') validAt = new Date(validAt).getTime()
-		else if (typeof validAt !== 'number') throw new Error(`Invalid validAt type: ${typeof validAt}`);
+		else if (typeof validAt !== 'number') throw new Error(`"validAt" should be string or number at item ${index+1}. Found: ${typeof validAt}`);
 	} else { // If there is no validAt in the object, we try to calculate it
-		if (object.hasOwnProperty('read2sendSec')) {
-			validAt = Date.now() - (dataObj.msgHeader.read2send * 1000);
-		} 
-		else if(object.hasOwnProperty('read2sendMs')) {
-			validAt = Date.now() - (dataObj.msgHeader.read2send );
-		} 
+		if      (object.hasOwnProperty('read2sendSec')) validAt = Date.now() - (object.read2sendSec * 1000);
+		else if (object.hasOwnProperty('read2sendMs'))  validAt = Date.now() - (object.read2sendMs);
 		else validAt = 0;	
 	}
 	return validAt;
 }
-async function readFromDb(data,result){
-	try{
-		const query=JSON.parse(data);
-		log(LOG_LEVELS.DEBUG,"readFromDb trying find....");
-		const database = dbClient.db(config.dbCfg.dbName);
-		const msg = database.collection('msg');
-		result = await msg.find(query).toArray();
-		log(LOG_LEVELS.DEBUG,"dbFindResult:\n", result);
-		return true;
-	} catch (error) {
-		result[0]= error.message;
-		return false;
+// look for a property (based on a list of propery names) in an object, check its type, 
+// and return its value
+function getProperty(object, prop,  index, type,defaultValue) {
+	if (Array.isArray(prop)) {
+		for (const item of prop) {
+			if (chkProperty(object, item, type,index)) return object[item];
+		}
+		return defaultValue;
+	} else
+	return chkProperty(object, prop, type,index) ? object[prop] : defaultValue;
+}
+function chkProperty(object, prop, type,index) {
+	if (object.hasOwnProperty(prop)){
+		const foundType=(Array.isArray(object[prop]))? 'array': typeof object[prop];
+		if (type !== null && foundType !== type) throw new Error(`Property ${prop} should be of type ${type} at item ${index+1}. Found: ${foundType}`);
+		else return true;
 	}
+	return false;
 }
 
 // Server startup
@@ -279,7 +215,7 @@ async function startServer() {
 // Graceful shutdown
 process.on('uncaughtException', (error) => {
     log(LOG_LEVELS.ERROR,"Uncaught Exception:", error.message);
-    shutdown(1); e
+    shutdown(1);
 });
 process.on('unhandledRejection', (reason, promise) => {
     log(LOG_LEVELS.ERROR,"Unhandled Rejection:", reason);
