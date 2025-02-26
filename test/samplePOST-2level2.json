@@ -1,0 +1,13 @@
+{ 
+    "msg-header": {
+        "dev_id": "P01"
+        
+    },
+    "msg-items":[
+        { "valid_at": 756000000,"val_type": "s0t", "value": 12.3},
+        { "valid_at": "2025-01-23T13:49:51.000Z","value_type": "s0h", "value": 45.6},
+        { "read2sendMs":2500,"valueType": "s1t", "value": 78.9},
+        { "read2sendSec":1,"valType": "s1h", "value": 12.3},
+        { "sensorID": "s2t", "value": 45.6}
+    ]
+}

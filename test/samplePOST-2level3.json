@@ -1,0 +1,13 @@
+{ 
+    "msg-header": {
+        "something":"elseP01"
+        
+    },
+    "msg-items":[
+        { "dev_id": "P01","valid_at": 756000000,"val_type": "s0t", "value": 12.3},
+        { "device_id": "P02","read2sendMs":1500,"value_type": "s0h", "value": 45.6},
+        { "deviceId":"P03", "read2sendSec":3,"valueType": "s1t", "value": 78.9},
+        { "deviceId":"P04", "read2sendSec":3,"logLevel": "I", "message": "78.9"}
+        
+    ]
+}

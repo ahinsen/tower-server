@@ -1,0 +1,15 @@
+{ 
+    "msg-header": {
+        "dev_id": "P01",
+        "valid_at": 756000000
+    },
+    "msg-items":[
+        { "val_type": "s0t", "value": 12.3},
+        { "value_type": "s0h", "value": 45.6},
+        { "valueType": "s1t", "value": 78.9},
+        { "valType": "s1h", "value": 12.3},
+        { "sensorID": "s2t", "value": 45.6},
+        { "sensor_id": "s2h", "values": 78.9},
+        { "sensorId": "s3t", "value": 12.3}
+    ]
+}
