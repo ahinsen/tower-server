@@ -1,0 +1,34 @@
+{
+  "type": "module",
+  "name": "tower-server",
+  "version": "1.0.0",
+  "description": "Server side code for tower",
+  "main": "iotserver1.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "tower-server"
+  },
+  "keywords": [
+    "api",
+    "mongodb"
+  ],
+  "author": "Andras Hinsenkamp",
+  "license": "ISC",
+  "dependencies": {
+    "http": "^0.0.1-security",
+    "mongodb": "^6.13.0",
+    "node-fetch": "^3.0.0",
+    "querystring": "^0.2.1",
+    "url": "^0.11.4",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.4"
+  }
+}

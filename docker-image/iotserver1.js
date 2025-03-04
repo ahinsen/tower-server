@@ -15,7 +15,6 @@ import querystring from 'querystring';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { error } from 'console';
-import { keyGen } from './keyGen.js';
 // Read and parse the JSON configuration file
 const configPath = path.resolve('./towerSrvCfg.json');
 const configData = await fs.readFile(configPath, 'utf-8');
@@ -37,17 +36,15 @@ const httpListener = async function(req, res) {
 	req.on('data', chunk => data += chunk.toString());
 	req.on('end', async () => {
 		try {
-			log(LOG_LEVELS.DEBUG,'Request Headers:', JSON.stringify(req.headers));
+			log(LOG_LEVELS.DEBUG,'Request Headers:', req.headers);
 			log(LOG_LEVELS.DEBUG,'Request Method:', req.method);
 			log(LOG_LEVELS.DEBUG,'Request URL:', req.url);
 			log(LOG_LEVELS.DEBUG,'Data:', data);
 			if (req.method === 'POST') {
-				if (req.headers['tower-key']!=keyGen(config,data)){//(receivedKey !== generatedKey)
-					httpResponse(res,400,`tower-key mismatch. 'content-length' in header: ${req.headers['content-length']} received: ${data.length}`);
-				}else {
-					resp = await writeToDb(data);
-					httpResponse(res, resp.code, resp.message); // default response if no other response is sent
-				}
+				log(LOG_LEVELS.DEBUG,'towerKey in header:', req.headers['towerkey'], ' calculated: ',sum(data));
+				log(LOG_LEVELS.DEBUG,'length in header::', req.headers['Content-ength'], ' calculated: ',data.length);
+				resp = await writeToDb(data); 
+				httpResponse(res,resp.code,resp.message); //default response if no other response is sent
 			} else httpResponse(res,400,"Unsupported request method:",req.method);
 		} catch (error) {
 			httpResponse(res,500, "Error during processing request(end)", error.message);
@@ -67,7 +64,14 @@ async function httpResponse(res, code, message) {
 	} else log(LOG_LEVELS.DEBUG, "(Response already sent) ", code,  message);
 }
 
-
+function sum(pl) {
+    let s = 0;
+    for (let i = 1; i <= pl.length; i++) {
+        let c = pl.charCodeAt(i - 1);
+        if (c >= 32) s += (c - 32) * i;
+    }
+    return `${config.clientId}${s}`;
+}
 // Database functions
 // Parse the message and write to the values and log collections
 async function writeToDb(message){
