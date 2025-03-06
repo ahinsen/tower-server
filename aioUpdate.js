@@ -30,7 +30,7 @@ setInterval(() => {
 async function sendValue() {
     const client = new MongoClient('mongodb://localhost:27017');
     try {
-        // Retreive the next item in the values collection to send:
+        // Retreive the next item in the values or log collection to send:
         // the oldest item without an 'aioStatus' property
         await client.connect();
         const db = client.db('iotsrv');
