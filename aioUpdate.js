@@ -34,18 +34,39 @@ async function sendValue() {
         // the oldest item without an 'aioStatus' property
         await client.connect();
         const db = client.db('iotsrv');
-        const collection = db.collection('values');
-        const nextDoc = await collection.findOne(
+        let collection = db.collection('values');
+        const nextValue = await collection.findOne(
             { aioStatus: { $exists: false } },
             { sort: { validAt: 1 } }
         );
+        collection = db.collection('log');
+        const nextLog = await collection.findOne(
+            { aioStatus: { $exists: false } },
+            { sort: { timestamp: 1 } }
+        );
+        let feedKey='';
+        let aioObj={};
+        let nextItem={};
         // If there is a value to send, send it to AdafruitIO, ...
-        if (nextDoc) {
-            const aioObj = {created_at: new Date(nextDoc.validAt).toISOString(),value: Math.round(nextDoc.value*1000)/1000};
-            const feedKey = (String(nextDoc.deviceId) + String(nextDoc.sensorId)).toLowerCase();
+        if (nextValue || nextLog) {
+            // if nexLog is older, or only nextLog exists -> send log
+            if (nextValue && nextLog && nextValue.validAt > nextLog.timestamp || !nextValue){
+                aioObj = {created_at: new Date(nextLog.timestamp).toISOString(),value: nextLog.logLevel+' '+nextLog.logMsg};
+                feedKey = (String(nextLog.deviceId) + 'conn').toLowerCase();  
+                nextItem = nextLog;
+                log(LOG_LEVELS.DEBUG,`Next item to send (log): ${JSON.stringify(nextLog)} `);
+             }                
+            // if nexValue is older, or only nextValue exists -> send value
+            if (nextValue && nextLog && nextValue.validAt <= nextLog.timestamp || !nextLog){
+                aioObj = {created_at: new Date(nextValue.validAt).toISOString(),value: Math.round(nextValue.value*1000)/1000};
+                feedKey = (String(nextValue.deviceId) + String(nextValue.valueType)).toLowerCase();
+                nextItem = nextValue;
+                log(LOG_LEVELS.DEBUG,`Next item to send (value): ${JSON.stringify(nextValue)} `);
+                collection = db.collection('values');
+            }
             let aioStat = 'sending';
-            log(LOG_LEVELS.DEBUG,`Next value to send: ${JSON.stringify(nextDoc)} -> ${JSON.stringify(aioObj)}`);
             const url = `https://io.adafruit.com/api/v2/${username}/feeds/${feedKey}/data`;
+            log(LOG_LEVELS.DEBUG,`Sending to: ${url} -> ${JSON.stringify(aioObj)}`);
             const response = await fetch(url, {
                 method: 'POST',
                 headers: {
@@ -67,9 +88,11 @@ async function sendValue() {
             try { parsedBody = JSON.parse(aioResponse); } 
             catch (e) { parsedBody = aioResponse;}
             await collection.updateOne(
-                { _id: nextDoc._id },
-                { $set: { aioResponse: parsedBody, aioStatus: aioStat } }
+                { _id: nextItem._id },
+                { $set: { aioResponse: parsedBody, aioStatus: aioStat, at:Date.now()} }
             );
+            const savedItem = await collection.findOne({ _id: nextItem._id });
+            log(LOG_LEVELS.DEBUG,`Updated ${collection.collectionName} with status: ${savedItem.aioStatus}`);
         }
     } catch (error) {
         log(LOG_LEVELS.ERROR, 'Error sending value to AdafruitIO:', error);
@@ -137,4 +160,3 @@ async function syncSettings(feedKey) {
         await client.close();
     }
 }
-

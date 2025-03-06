@@ -63,7 +63,8 @@ async function httpResponse(res, code, message) {
 		log(LOG_LEVELS.DEBUG,'Response: ', code, message);
 		await res.writeHead(code);
 		const currTime=new Date().toISOString();
-		await res.end('{"serverTime":"'+currTime+'","message":"'+message.replace(/"/g, '\\"')+'"}');
+//		await res.end('{"serverTime":"'+currTime+'","message":"'+message.replace(/"/g, '\\"')+'"}');
+		await res.end('{"serverTime":"'+currTime+'","message":"'+message+'"}');
 	} else log(LOG_LEVELS.DEBUG, "(Response already sent) ", code,  message);
 }
 
