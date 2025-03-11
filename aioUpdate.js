@@ -11,7 +11,26 @@ const config = JSON.parse(configData);
 
 const ioKey = config.aioCfg.key;
 const username = config.aioCfg.username;
-setLogLevel(config.logLevel);
+const delay = config.aioCfg.updateDelayMs;
+if (!delay) {
+    log(LOG_LEVELS.ERROR, 'Missing delay in config (using 1000ms)');
+    delay=1000;
+}
+let dbClient;
+let db;
+try {
+    setLogLevel(config.logLevel);
+    // Prepare the MongoDB server connection
+    dbClient = new MongoClient(config.dbCfg.uri);
+    await dbClient.connect();
+    db = dbClient.db('iotsrv');
+    log(LOG_LEVELS.INFO,"aioUpdate connected successfully to MongoDB");
+} catch (error) {
+    log(LOG_LEVELS.ERROR, "Error starting aioUpdate:", error.message);
+    await shutdown(1); // Gracefully shut down with an error code
+}
+
+
 
 // Send unsent items from the value collestion to AdafruitIO
 setInterval(sendValue, 2000);
@@ -28,20 +47,28 @@ setInterval(() => {
 //syncSettings('P01PRID')
 
 async function sendValue() {
-    const client = new MongoClient('mongodb://localhost:27017');
     try {
         // Retreive the next item in the values or log collection to send:
-        // the oldest item without an 'aioStatus' property
-        await client.connect();
-        const db = client.db('iotsrv');
+        // the oldest item without an 'aioStatus' property. 
+        // AIO accepts dates not older than 60 days and not in the future
+        const minTime=new Date().getTime() - 60*24*3600*1000; // 60 days
+        const maxTime=new Date().getTime() - delay; // value set in Cfg to avoid sending future data
         let collection = db.collection('values');
         const nextValue = await collection.findOne(
-            { aioStatus: { $exists: false } },
+            { 
+            aioStatus: { $exists: false },
+            validAt: { $lt: maxTime },
+            validAt: { $gt: minTime } 
+            },
             { sort: { validAt: 1 } }
         );
+ //       if (nextValue) log(LOG_LEVELS.INFO,`${new Date().toISOString()}:Min-MaxTime:${new Date(minTime).toISOString()}---${new Date(maxTime).toISOString()} ValidAt: ${new Date(nextValue.validAt).toISOString()} `);
         collection = db.collection('log');
         const nextLog = await collection.findOne(
-            { aioStatus: { $exists: false } },
+            { aioStatus: { $exists: false },
+            timestamp: { $lt: maxTime },
+            timestamp: { $gt: minTime }
+        },
             { sort: { timestamp: 1 } }
         );
         let feedKey='';
@@ -66,7 +93,8 @@ async function sendValue() {
             }
             let aioStat = 'sending';
             const url = `https://io.adafruit.com/api/v2/${username}/feeds/${feedKey}/data`;
-            log(LOG_LEVELS.DEBUG,`Sending to: ${url} -> ${JSON.stringify(aioObj)}`);
+            const aioRequest = `${url} -> ${JSON.stringify(aioObj)}`;
+            log(LOG_LEVELS.DEBUG,`Sending to: ${aioRequest}`);
             const response = await fetch(url, {
                 method: 'POST',
                 headers: {
@@ -81,7 +109,8 @@ async function sendValue() {
                 log(LOG_LEVELS.DEBUG, 'Successfully sent to AdafruitIO');
             } else {
                 aioStat = 'Error';
-                log(LOG_LEVELS.ERROR,'AdafruitIO send error:', aioResponse);
+                log(LOG_LEVELS.ERROR,'AdafruitIO error. Request:', aioRequest, );
+                log(LOG_LEVELS.ERROR,'AdafruitIO error. Response:', aioResponse, );
             }
             // ... and update the document in the collection with the AdafruitIO response
             let parsedBody;
@@ -89,23 +118,19 @@ async function sendValue() {
             catch (e) { parsedBody = aioResponse;}
             await collection.updateOne(
                 { _id: nextItem._id },
-                { $set: { aioResponse: parsedBody, aioStatus: aioStat, at:Date.now()} }
+                { $set: { aioResponse: {request: aioRequest, response: parsedBody}, aioStatus: aioStat, at:Date.now()} }
             );
             const savedItem = await collection.findOne({ _id: nextItem._id });
             log(LOG_LEVELS.DEBUG,`Updated ${collection.collectionName} with status: ${savedItem.aioStatus}`);
         }
     } catch (error) {
         log(LOG_LEVELS.ERROR, 'Error sending value to AdafruitIO:', error);
-        await client.close();
     }
 }
 
 // Synchronize 'settings' collection with new data from Adafruit IO
 async function syncSettings(feedKey) {
-    const client = new MongoClient(config.dbCfg.uri);
     try {
-        await client.connect();
-        const db = client.db(config.dbCfg.dbName);
         const collection = db.collection('settings');
 
         // Step 1: Get the last item in settings based on validAt property
@@ -156,7 +181,28 @@ async function syncSettings(feedKey) {
         }
     } catch (error) {
         log(LOG_LEVELS.ERROR, feedKey,'Error synchronizing settings:', error);
-    } finally {
-        await client.close();
-    }
+    } 
 }
+
+// Graceful shutdown
+process.on('uncaughtException', (error) => {
+    log(LOG_LEVELS.ERROR,"aioUpdate uncaught Exception:", error.message);
+    shutdown(1);
+});
+process.on('unhandledRejection', (reason, promise) => {
+    log(LOG_LEVELS.ERROR,"aioUpdate unhandled Rejection:", reason);
+    shutdown(1); 
+});
+process.on('SIGINT', () => shutdown(0));
+process.on('SIGTERM', () => shutdown(0));
+
+
+// Define the shutdown function globally
+const shutdown = async (exitCode) => {
+    log(LOG_LEVELS.INFO,"Shutting down aioUpdate...");
+    if (dbClient) {
+        await dbClient.close();
+    }
+    log(LOG_LEVELS.INFO,"aioUpdate shut down");
+    process.exit(exitCode);
+};

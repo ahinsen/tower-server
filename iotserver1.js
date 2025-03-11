@@ -206,15 +206,15 @@ async function startServer() {
         // Prepare the MongoDB server connection
         dbClient = new MongoClient(config.dbCfg.uri);
         await dbClient.connect();
-        log(LOG_LEVELS.INFO,"Connected successfully to MongoDB");
+        log(LOG_LEVELS.INFO,"iotserver connected successfully to MongoDB");
 
         // Prepare and start the HTTP server
         const httpServer = createServer(httpListener);
         httpServer.listen(config.httpCfg.port, config.httpCfg.host, () => {
-            log(LOG_LEVELS.INFO,`Server running at http://${config.httpCfg.host}:${config.httpCfg.port}/`);
+            log(LOG_LEVELS.INFO,`iotserver running at http://${config.httpCfg.host}:${config.httpCfg.port}/`);
         });
 	} catch (error) {
-		log(LOG_LEVELS.ERROR, "Error starting server:", error.message);
+		log(LOG_LEVELS.ERROR, "Error starting iotserver:", error.message);
 		await shutdown(1); // Gracefully shut down with an error code
 	}
 }

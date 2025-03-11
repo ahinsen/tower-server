@@ -1,3 +1,5 @@
 node_modules/
 towerSrvCfg.json 
+towerSrvCfg_container.json 
 keyGen.js
+docker-image/image.tar

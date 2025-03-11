@@ -1,15 +1,15 @@
 {
+    "clientId":"H-P",
     "dbCfg": {
         "uri": "mongodb://127.0.0.1:27017/?directConnection=true&serverSelectionTimeoutMS=20000",
-        "dbName": "mydb"
+        "dbName": "iotsrv"
     },
-   
     "httpCfg": {
         "host": "127.0.0.1",
         "port": 8000,
         "timeout": 30000
     },
-    "logLevel": "debug",
+    "logLevel": "info",
     "allowedLoglevels": [
         "error",
         "warn",
@@ -17,7 +17,18 @@
         "debug"
     ],
     "aioCfg": {
-        "username": "my_User",
-        "key": "aio_my_key"
+        "username": "your login name",
+        "key": "yourAIOkey",
+        "updateDelayMs": 30000
+    },
+    "propNames": {
+        "header":["msgHeader","msg_header","msg-header","header"],
+        "items":["msgItems","msg_items","msg-items","items"],
+        "deviceId":["deviceId", "deviceID", "device_id","dev_id","devId","devID"],
+        "valueType":["valueType", "value_type", "val_type","valType", "sensor_id", "sensorId", "sensorID"],
+        "logLevel" : ["logLevel", "log_level", "log-level"],
+        "logMsg" : ["logMsg", "content", "message", "msg", "log_msg", "text", "logText", "log_text", "txt","logTxt","log_txt"],
+        "validAt":["validAt", "valid_at", "created_at", "createdAt", "timestamp"]
     }
+
 }
