@@ -1,7 +1,9 @@
-version: '3'
+# version: '3'
 services:
   app:
     build: .
+    image: iotsrv
+    container_name: iotsrv
     ports:
       - "8000:8000"
     depends_on:

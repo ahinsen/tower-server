@@ -1,21 +1,30 @@
 FROM node:23.7.0
 
-WORKDIR /home/iot-server/tower-server/docker-image
+WORKDIR /home/tower-server/
 
-COPY package*.json ./
-
-RUN npm install
+#COPY /home/iot-server/tower-server/package.json ./
+#COPY /home/iot-server/tower-server/package-lock.json ./
 
 COPY . .
+RUN npm install
+# Install forever globally
+RUN npm install -g forever
+
+#COPY /home/iot-server/tower-server/*.js ./
+#COPY /home/iot-server/tower-server/towerSrvCfg_container.json ./towerSrvCfg.json
+#/towerSrvCfg.json
+
+#COPY ../iotserver1.js .
+
+#COPY ../aioUpdate.js .
 
 # Copy the entrypoint script
-# COPY entrypoint.sh /usr/local/bin/
+COPY ./entrypoint.sh /usr/local/bin/
 
 # Make the entrypoint script executable
-# RUN chmod +x /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
 EXPOSE 8000
 
 ENTRYPOINT ["entrypoint.sh"]
 
-CMD ["node", "iotserver1.js"]
