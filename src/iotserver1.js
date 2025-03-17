@@ -10,14 +10,15 @@ check log using journalctl -u iotsrv.service
 import { MongoClient } from 'mongodb';
 import { createServer, get } from 'http';
 import { LOG_LEVELS, setLogLevel, log } from './log.js';
-import url from 'url';
-import querystring from 'querystring';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { error } from 'console';
 import { keyGen } from './keyGen.js';
 // Read and parse the JSON configuration file
-const configPath = path.resolve('./towerSrvCfg.json');
+const configPath = path.resolve(process.env.TOWER_SRV_CFG_PATH);
+if (!configPath) {
+	throw new Error("Missing required 'TOWER_SRV_CFG_PATH' environment variable");
+}
 const configData = await fs.readFile(configPath, 'utf-8');
 const config = JSON.parse(configData);
 
