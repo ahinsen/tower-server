@@ -1,7 +1,7 @@
 node_modules/
 towerSrvCfg.json 
 towerSrvCfg_container.json 
-keyGen.js
+src/keyGen.js
 docker-image/iotsrv.tar
 docker-image/*.js
-docker-image/iotserver1.js
+docker-image/*.json
