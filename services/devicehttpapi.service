@@ -1,10 +1,10 @@
 [Unit]
-Description=Iot Server
+Description=Device Http API
 After=apache2
 After=mongod
 
 [Service]
-ExecStart= /home/iot-server/.nvm/versions/node/v23.7.0/bin/node /home/iot-server/tower-server/iotserver1.js
+ExecStart= /home/iot-server/.nvm/versions/node/v23.7.0/bin/node /home/iot-server/tower-server/deviceHttpAPI.js
 Restart=always
 User=nobody
 Group=nogroup
