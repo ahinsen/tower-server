@@ -3,7 +3,7 @@
   "name": "tower-server",
   "version": "1.0.0",
   "description": "Server side code for tower",
-  "main": "iotserver1.js",
+  "main": "deviceHttpAPI.js",
   "directories": {
     "test": "test"
   },
