@@ -14,7 +14,7 @@ RUN npm install
 
 # Make the entrypoint script executable
 #RUN chmod +x /usr/local/bin/entrypoint.sh
-
+ENV TOWER_SRV_CFG_PATH=/home/tower-server/towerSrvCfg_container.json
 EXPOSE 8000
 
 #ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

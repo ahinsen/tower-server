@@ -5,7 +5,10 @@ import {log, setLogLevel, LOG_LEVELS} from './log.js';
 import { promises as fs } from 'fs';
 import path from 'path';
 // Read and parse the JSON configuration file
-const configPath = path.resolve('./towerSrvCfg.json');
+if (!process.env.TOWER_SRV_CFG_PATH) {
+    throw new Error("Missing required 'TOWER_SRV_CFG_PATH' environment variable");
+}
+const configPath = path.resolve(process.env.TOWER_SRV_CFG_PATH);
 const configData = await fs.readFile(configPath, 'utf-8');
 const config = JSON.parse(configData);
 

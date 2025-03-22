@@ -8,12 +8,12 @@ services:
       - "8000:8000"
     depends_on:
       - mongo
-    environment:
-      - TOWER_SRV_CFG_PATH=/home/tower-server/towerSrvCfg_container.json
+#    environment:
+#      - TOWER_SRV_CFG_PATH=/home/tower-server/towerSrvCfg_container.json
   mongo:
     image: mongo:7.0.14
-#    ports:
-#      - "27017:27017"
+    ports:
+      - "27018:27017"
     volumes:
       - mongo-data:/data/db
 volumes:

@@ -3,7 +3,7 @@
 # filepath: /home/iot-server/tower-server/test/test_post.sh
 
 # Define the URL to which the POST request will be sent
-URL="http://localhost:8002"
+URL="http://localhost:8000"
 
 # Get the JSON file path from the first argument
 JSON_FILE="$1"
