@@ -8,17 +8,18 @@ check log using journalctl -u iotsrv.service
 
 //import config from './towerSrvCfg.json' assert { type: 'json' };
 import { MongoClient } from 'mongodb';
-import { createServer, get } from 'http';
+import { createServer } from 'http';
 import { LOG_LEVELS, setLogLevel, log } from './log.js';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { error } from 'console';
 import { keyGen } from './keyGen.js';
+import { startUpdate } from './aioUpdate.js';
 // Read and parse the JSON configuration file
-const configPath = path.resolve(process.env.TOWER_SRV_CFG_PATH);
-if (!configPath) {
+if (!process.env.TOWER_SRV_CFG_PATH) {
 	throw new Error("Missing required 'TOWER_SRV_CFG_PATH' environment variable");
 }
+const configPath = path.resolve(process.env.TOWER_SRV_CFG_PATH);
 const configData = await fs.readFile(configPath, 'utf-8');
 const config = JSON.parse(configData);
 
@@ -43,7 +44,7 @@ const httpListener = async function(req, res) {
 			log(LOG_LEVELS.DEBUG,'Request URL:', req.url);
 			log(LOG_LEVELS.DEBUG,'Data:', data);
 			if (req.method === 'POST') {
-				if (req.headers['tower-key']!=keyGen(config,data)){//(receivedKey !== generatedKey)
+				if (config.httpCfg.keyChk && req.headers['tower-key']!=keyGen(config,data)){//(receivedKey !== generatedKey)
 					httpResponse(res,400,`tower-key mismatch. 'content-length' in header: ${req.headers['content-length']} received: ${data.length}`);
 				}else {
 					resp = await writeToDb(data);
@@ -202,20 +203,25 @@ async function startServer() {
         if (!config.httpCfg.port) throw new Error("Missing required config property in 'towerSrvCfg.json': httpCfg.port");
         if (!config.httpCfg.host) throw new Error("Missing required config property in 'towerSrvCfg.json': httpCfg.host");
         if (!config.dbCfg.uri) throw new Error("Missing required config property in 'towerSrvCfg.json': dbCfg.uri");
+		if (config.aioCfg){
+			if (!config.aioCfg.username) throw new Error("Missing required config property in 'towerSrvCfg.json': aioCfg.username");
+			if (!config.aioCfg.key) throw new Error("Missing required config property in 'towerSrvCfg.json': aioCfg.key");
+			startUpdate();
+		}
 		setLogLevel(config.logLevel);
 
         // Prepare the MongoDB server connection
         dbClient = new MongoClient(config.dbCfg.uri);
         await dbClient.connect();
-        log(LOG_LEVELS.INFO,"iotserver connected successfully to MongoDB");
+        log(LOG_LEVELS.INFO,"deviceHttpAPI connected successfully to MongoDB");
 
         // Prepare and start the HTTP server
         const httpServer = createServer(httpListener);
         httpServer.listen(config.httpCfg.port, config.httpCfg.host, () => {
-            log(LOG_LEVELS.INFO,`iotserver running at http://${config.httpCfg.host}:${config.httpCfg.port}/`);
+            log(LOG_LEVELS.INFO,`deviceHttpAPI running at http://${config.httpCfg.host}:${config.httpCfg.port}/`);
         });
 	} catch (error) {
-		log(LOG_LEVELS.ERROR, "Error starting iotserver:", error.message);
+		log(LOG_LEVELS.ERROR, "Error starting deviceHttpAPI:", error.message);
 		await shutdown(1); // Gracefully shut down with an error code
 	}
 }

@@ -12,39 +12,36 @@ const config = JSON.parse(configData);
 const ioKey = config.aioCfg.key;
 const username = config.aioCfg.username;
 const delay = config.aioCfg.updateDelayMs;
-if (!delay) {
-    log(LOG_LEVELS.ERROR, 'Missing delay in config (using 1000ms)');
-    delay=1000;
-}
 let dbClient;
 let db;
-try {
-    setLogLevel(config.logLevel);
-    // Prepare the MongoDB server connection
-    dbClient = new MongoClient(config.dbCfg.uri);
-    await dbClient.connect();
-    db = dbClient.db('iotsrv');
-    log(LOG_LEVELS.INFO,"aioUpdate connected successfully to MongoDB");
-} catch (error) {
-    log(LOG_LEVELS.ERROR, "Error starting aioUpdate:", error.message);
-    await shutdown(1); // Gracefully shut down with an error code
+
+async function startUpdate(){
+    if (!delay) {
+        log(LOG_LEVELS.ERROR, 'Missing updateDelayMs in config.aioCfg (using 1000ms)');
+        delay=1000;
+    }
+    try {
+        setLogLevel(config.logLevel);
+        // Prepare the MongoDB server connection
+        dbClient = new MongoClient(config.dbCfg.uri);
+        await dbClient.connect();
+        db = dbClient.db('iotsrv');
+        log(LOG_LEVELS.INFO,"aioUpdate connected successfully to MongoDB");
+    } catch (error) {
+        log(LOG_LEVELS.ERROR, "Error starting aioUpdate:", error.message);
+        return;
+    }
+    // Send unsent items from the value collestion to AdafruitIO
+    setInterval(sendValue, 2000);
+     // Synchronize settings for all feeds TODO: config
+    const settingFeeds = [
+        'P01PRID','P02PRID','P03PRID','P04PRID','P05PRID','P06PRID', 
+        'V01TIMER','V02TIMER','V03TIMER','V04TIMER','V05TIMER','V06TIMER'
+    ];
+    setInterval(() => {
+        settingFeeds.forEach(async (feed) => await syncSettings(feed));
+    }, 10000);
 }
-
-
-
-// Send unsent items from the value collestion to AdafruitIO
-setInterval(sendValue, 2000);
-//sendValue();
-
-// Synchronize settings for all feeds TODO: config
-const settingFeeds = [
-    'P01PRID','P02PRID','P03PRID','P04PRID','P05PRID','P06PRID', 
-    'V01TIMER','V02TIMER','V03TIMER','V04TIMER','V05TIMER','V06TIMER'
-];
-setInterval(() => {
-    settingFeeds.forEach(async (feed) => await syncSettings(feed));
-}, 10000);
-//syncSettings('P01PRID')
 
 async function sendValue() {
     try {
@@ -183,7 +180,7 @@ async function syncSettings(feedKey) {
         log(LOG_LEVELS.ERROR, feedKey,'Error synchronizing settings:', error);
     } 
 }
-
+/*
 // Graceful shutdown
 process.on('uncaughtException', (error) => {
     log(LOG_LEVELS.ERROR,"aioUpdate uncaught Exception:", error.message);
@@ -206,3 +203,5 @@ const shutdown = async (exitCode) => {
     log(LOG_LEVELS.INFO,"aioUpdate shut down");
     process.exit(exitCode);
 };
+*/
+export {startUpdate};

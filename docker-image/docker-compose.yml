@@ -2,14 +2,14 @@
 services:
   app:
     build: .
-    image: iotsrv
-    container_name: iotsrv
+    image: towersrv
+    container_name: towersrv
     ports:
       - "8000:8000"
     depends_on:
       - mongo
-#    environment:
-#      - MONGO_URI=mongodb://mongo:27017/ #iotsrv
+    environment:
+      - TOWER_SRV_CFG_PATH=/home/tower-server/towerSrvCfg_container.json
   mongo:
     image: mongo:7.0.14
 #    ports:

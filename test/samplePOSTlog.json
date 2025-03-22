@@ -3,5 +3,5 @@
         "dev_id": "P01",
         "valid_at": 756000000
     },
-    "msg-items":[{ "loglevel": "I", "content": "locallog content"}]
+    "msg-items":[{ "logLevel": "I", "logMsg": "locallog content"}]
 }
