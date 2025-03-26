@@ -1,0 +1,11 @@
+{ 
+    "msg-header": { },
+    "msg-items":[
+        { "dev_id": "P01","valid_at": "2025-03-23T13:49:51.000Z","sensorId": "s0h", "value": 45},
+        { "dev_id": "P01","valid_at": "2025-03-23T13:50:51.000Z","sensorId": "s0h", "value": 46},
+        { "dev_id": "P01","valid_at": "2025-03-23T13:49:51.000Z","sensorId": "s0t", "value": 47},
+        { "dev_id": "P01","valid_at": "2025-03-23T13:50:51.000Z","sensorId": "s0t", "value": 48},
+        { "dev_id": "P01","valid_at": "2025-03-23T13:49:51.000Z","sensorId": "s1t", "value": 49},
+        { "dev_id": "P01","valid_at": "2025-03-23T13:50:51.000Z","sensorId": "s1t", "value": 50}
+    ]
+}
